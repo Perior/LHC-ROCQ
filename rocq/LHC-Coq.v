@@ -2,11 +2,22 @@
   Formal Verification of Successive Running Sums (SRS) in Coq
   Translated from HOL4 proofs from:
   "Formal Verification of Real-Time Data Processing of the LHC Beam Loss Monitoring System"
+
+
+  Theorem 1. 
+  Theorem 2. better_max_error
+  Theorem 3. max_error_eq / max_relative_error
 *)
 
 Require Import Arith Lia List.
 Import ListNotations.
-Require Import Coq.Program.Wf.
+Require Import Program.Wf.
+Require Import Arith.Arith.
+Require Import Relations.Relation_Definitions.
+Require Import Wellfounded.
+
+From Equations Require Import Equations.
+Set Equations With UIP.
 
 Definition tap (n x : nat) : nat :=
   match n, x with
@@ -85,30 +96,32 @@ Definition update_time (n t : nat) : bool :=
   (t mod delay n) =? 0.
 (* Compute update_time 3 10. *)
 
-Section SliceDef.
+(* Section SliceDef.
 
-Variable output : (nat -> nat) -> nat -> nat -> nat -> nat.
-Variable SR : (nat -> nat) -> nat -> nat -> nat -> nat.
+Variable output_var : (nat -> nat) -> nat -> nat -> nat -> nat.
+Variable SR_var : (nat -> nat) -> nat -> nat -> nat -> nat.
 
 Program Fixpoint source (D : nat -> nat) (n m t : nat) {measure m} : nat :=
   match m with
   | 0 =>
       let '(n', x) := input n in
-      output D n' x t
-  | S m' => SR D n m' t
+      output_var D n' x t
+  | S m' => SR_var D n m' t
   end.
+  Next Obligation. apply well_founded_ltof. Defined.
 
-Program Fixpoint SR_def (D : nat -> nat) (n m t : nat) {measure t} : nat :=
+Program Fixpoint SR (D : nat -> nat) (n m t : nat) {measure t} : nat :=
   match t with
   | 0 => 0
   | S t' =>
       if update_time n (S t') then
         source D n m t'
       else
-        SR_def D n m t'
+        SR D n m t'
   end.
+  Next Obligation. apply well_founded_ltof. Defined.
 
-Program Fixpoint output_def (D : nat -> nat) (n x t : nat) {measure t} : nat :=
+Program Fixpoint output (D : nat -> nat) (n x t : nat) {measure t} : nat :=
   match t with
   | 0 =>
       match n with
@@ -117,11 +130,99 @@ Program Fixpoint output_def (D : nat -> nat) (n x t : nat) {measure t} : nat :=
       end
   | S t' =>
       if update_time n (S t') then
-        output_def D n x t' + source D n 0 t' - SR D n (tap n x) t'
+        output D n x t' + source D n 0 t' - SR D n (tap n x) t'
       else
-        output_def D n x t'
+        output D n x t'
+  end.
+  Next Obligation. apply well_founded_ltof. Defined.
+
+End SliceDef. *)
+
+Section SliceDef.
+
+Inductive slice_prot :=
+  | Src : (nat -> nat) -> nat -> nat -> nat -> slice_prot
+  | SRr : (nat -> nat) -> nat -> nat -> nat -> slice_prot
+  | Out : (nat -> nat) -> nat -> nat -> nat -> slice_prot.
+
+Definition slice_measure (d : slice_prot) : (nat * (nat * (nat * nat))) :=
+  match d with
+  | Src D n m t  => (n, (m, (t, 3)))
+  | SRr D n m t  => (n, (m, (t, 2)))
+  | Out D n x t  => (n, (tap n x, (t, 1)))
   end.
 
-End SliceDef.
+Definition slice_lt : _ -> _ -> Prop :=
+  lexprod nat (nat * (nat * nat))
+    lt (lexprod nat (nat * nat)
+          lt (lexprod nat nat lt lt)).
 
-Compute output_def 1 0 1 2.
+Instance slice_lt_wf : WellFounded (fun a b => slice_lt (slice_measure a) (slice_measure b)).
+Proof.
+  apply wf_inverse_image.
+  repeat apply wf_lexprod; apply lt_wf.
+Qed.
+
+Equations? slice (d : slice_prot) : nat by wf d (fun a b => slice_lt (slice_measure a) (slice_measure b)) :=
+slice (Src D n m t) :=
+  match m with
+  | 0 =>
+      let (n', x) := input n in
+      slice (Out D n' x t)
+  | S m' =>
+      slice (SRr D n m' t)
+  end;
+  
+slice (SRr D n m t) :=
+  match t with
+  | 0 => 0
+  | S t' =>
+      if update_time n (S t')
+      then slice (Src D n m t')
+      else slice (SRr D n m t')
+  end;
+
+slice (Out D n x t) :=
+  match t with
+  | 0 =>
+      if Nat.eqb n 0 then D 0 else 0
+  | S t' =>
+      if update_time n (S t')
+      then slice (Out D n x t') + slice (Src D n 0 t') - slice (SRr D n (tap n x) t')
+      else slice (Out D n x t')
+  end.
+Proof.
+  all: try (unfold slice_measure, slice_lt; simpl).
+
+  - (* slice Src D n 0 t → Out D n' x t *)
+    destruct (input n) as [n' x] eqn:Hinput.
+    assert (n' < n) by (apply input_earlier; lia).
+    apply lexprod_left; assumption.
+
+  - (* slice Src D n (S m') t → SRr D n m' t *)
+    apply lexprod_right, lexprod_left. lia.
+
+  - (* slice SRr D n m (S t') when update_time = true → Src D n m t' *)
+    apply lexprod_right, lexprod_right, lexprod_left. lia.
+
+  - (* slice SRr D n m (S t') when update_time = false → SRr D n m t' *)
+    apply lexprod_right, lexprod_right, lexprod_left. lia.
+
+  - (* slice Out D n x (S t') when update_time = true → Out D n x t' *)
+    apply lexprod_right, lexprod_right, lexprod_right. lia.
+
+  - (* slice Out D n x (S t') when update_time = true → Src D n 0 t' *)
+    apply lexprod_right, lexprod_left. lia.
+
+  - (* slice Out D n x (S t') when update_time = true → SRr D n (tap n x) t' *)
+    apply lexprod_right, lexprod_right, lexprod_left. lia.
+
+  - (* slice Out D n x (S t') when update_time = false → Out D n x t' *)
+    apply lexprod_right, lexprod_right, lexprod_right. lia.
+Qed.
+
+Definition source (D : nat -> nat) n m t := slice (Src D n m t).
+Definition SR     (D : nat -> nat) n m t := slice (SRr D n m t).
+Definition output (D : nat -> nat) n x t := slice (Out D n x t).
+
+End SliceDef.
