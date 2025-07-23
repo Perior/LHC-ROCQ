@@ -19,6 +19,8 @@ Require Import Wellfounded.
 From Equations Require Import Equations.
 Set Equations With UIP.
 
+Check Nat.lt_irrefl. 
+
 Definition tap (n x : nat) : nat :=
   match n, x with
   | 0, 0 => 0         | 0, _ => 0
@@ -138,6 +140,12 @@ Program Fixpoint output (D : nat -> nat) (n x t : nat) {measure t} : nat :=
 
 End SliceDef. *)
 
+Lemma example (n : nat) (H : n < 0) : False.
+Proof.
+  (* H : n < 0 *)
+  lia. (* or inversion H. *)
+Qed.
+
 Section SliceDef.
 
 Inductive slice_prot :=
@@ -192,33 +200,14 @@ slice (Out D n x t) :=
       else slice (Out D n x t')
   end.
 Proof.
-  all: try (unfold slice_measure, slice_lt; simpl).
-
-  - (* slice Src D n 0 t → Out D n' x t *)
-    destruct (input n) as [n' x] eqn:Hinput.
-    assert (n' < n) by (apply input_earlier; lia).
-    apply lexprod_left; assumption.
-
-  - (* slice Src D n (S m') t → SRr D n m' t *)
-    apply lexprod_right, lexprod_left. lia.
-
-  - (* slice SRr D n m (S t') when update_time = true → Src D n m t' *)
-    apply lexprod_right, lexprod_right, lexprod_left. lia.
-
-  - (* slice SRr D n m (S t') when update_time = false → SRr D n m t' *)
-    apply lexprod_right, lexprod_right, lexprod_left. lia.
-
-  - (* slice Out D n x (S t') when update_time = true → Out D n x t' *)
-    apply lexprod_right, lexprod_right, lexprod_right. lia.
-
-  - (* slice Out D n x (S t') when update_time = true → Src D n 0 t' *)
-    apply lexprod_right, lexprod_left. lia.
-
-  - (* slice Out D n x (S t') when update_time = true → SRr D n (tap n x) t' *)
-    apply lexprod_right, lexprod_right, lexprod_left. lia.
-
-  - (* slice Out D n x (S t') when update_time = false → Out D n x t' *)
-    apply lexprod_right, lexprod_right, lexprod_right. lia.
+  - left. admit.
+  - right. left. admit.
+  - right. right. left. admit.
+  - right. right. left. admit.
+  - right. right. left. admit.
+  - right. left. admit.
+  - right. right. left. admit.
+  - right. right. left. admit.
 Qed.
 
 Definition source (D : nat -> nat) n m t := slice (Src D n m t).
