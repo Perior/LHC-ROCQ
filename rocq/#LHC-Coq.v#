@@ -98,19 +98,53 @@ Definition update_time (n t : nat) : bool :=
   (t mod delay n) =? 0.
 (* Compute update_time 3 10. *)
 
+(* Section SliceDef.
+
+Variable output_var : (nat -> nat) -> nat -> nat -> nat -> nat.
+Variable SR_var : (nat -> nat) -> nat -> nat -> nat -> nat.
+
+Program Fixpoint source (D : nat -> nat) (n m t : nat) {measure m} : nat :=
+  match m with
+  | 0 =>
+      let '(n', x) := input n in
+      output_var D n' x t
+  | S m' => SR_var D n m' t
+  end.
+  Next Obligation. apply well_founded_ltof. Defined.
+
+Program Fixpoint SR (D : nat -> nat) (n m t : nat) {measure t} : nat :=
+  match t with
+  | 0 => 0
+  | S t' =>
+      if update_time n (S t') then
+        source D n m t'
+      else
+        SR D n m t'
+  end.
+  Next Obligation. apply well_founded_ltof. Defined.
+
+Program Fixpoint output (D : nat -> nat) (n x t : nat) {measure t} : nat :=
+  match t with
+  | 0 =>
+      match n with
+      | 0 => D 0
+      | _ => 0
+      end
+  | S t' =>
+      if update_time n (S t') then
+        output D n x t' + source D n 0 t' - SR D n (tap n x) t'
+      else
+        output D n x t'
+  end.
+  Next Obligation. apply well_founded_ltof. Defined.
+
+End SliceDef. *)
+
 Lemma example (n : nat) (H : n < 0) : False.
 Proof.
   (* H : n < 0 *)
   lia. (* or inversion H. *)
 Qed.
-
-Fixpoint last_update (n t : nat) : nat :=
-  match t with
-  | 0 => 0
-  | S t' =>
-      if update_time n (S t) then S t
-      else last_update n t'
-  end.
 
 Section SliceDef.
 
@@ -174,33 +208,10 @@ Proof.
   - right. left. admit.
   - right. right. left. admit.
   - right. right. left. admit.
-Admitted.
+Qed.
 
 Definition source (D : nat -> nat) n m t := slice (Src D n m t).
 Definition SR     (D : nat -> nat) n m t := slice (SRr D n m t).
 Definition output (D : nat -> nat) n x t := slice (Out D n x t).
 
 End SliceDef.
-
- (* Theorem 1: Slice output at update time matches exact sum at delayed time *)
-Theorem theorem1 :
-  forall D n x t,
-    0 < n ->
-    output D n x t =
-      if S (last_update n t) <? delay_sum n
-      then 0
-      else exact D n x (S (last_update n t) - delay_sum n).
-Proof.
-  =======
-Qed.
-
-(* Theorem 2: Always relate output to exact at delayed last update time *)
-Theorem Theorem2 :
-  forall (D : D) n x t,
-    output D n x t =
-    if (last_update n t + 1 <? delay_sum n)
-    then 0
-    else exact D n x (last_update n t + 1 - delay_sum n).
-Proof.
-  intros. unfold output. reflexivity.
-Qed.
